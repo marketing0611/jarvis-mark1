@@ -41,15 +41,23 @@ It's not just an assistant — it's an extension of your digital life.
 
 ## ⚡ Quick Start
 
+This fork is a local demo that talks in **Mongolian and English** with no API keys. It comes in two versions.
+
+**Web** (`web/` + `api/`) — runs in the browser and deploys to Vercel as-is (`vercel.json`):
+
 ```bash
-git clone https://github.com/FatihMakes/Mark-XXXIX-OR.git
-cd Mark-XXXIX-OR
 pip install -r requirements.txt
-playwright install
-python main.py
+python dev.py            # → http://localhost:3000
 ```
 
-> ⚠️ **Installation Note:** To keep the repository lightweight, some OS-specific dependencies are not bundled in `requirements.txt`. If you run into a `ModuleNotFoundError`, simply install the missing package via `pip install <module_name>` for your specific system.
+Voice input uses the browser's speech recognition (Chrome or Edge, Mongolian or English); VISION uses the webcam with MediaPipe face tracking in the browser.
+
+**Desktop** (`main.py`) — PyQt6 window with offline Whisper speech recognition, the arc-reactor HUD and the VISION helmet camera view:
+
+```bash
+pip install -r requirements-desktop.txt
+python main.py
+```
 
 ---
 
@@ -57,10 +65,10 @@ python main.py
 
 | Requirement | Details |
 |---|---|
-| **OS** | Windows 10/11, macOS, or Linux |
+| **OS** | macOS (desktop features are macOS-first), any modern browser for the web version |
 | **Python** | 3.11 or 3.12 |
-| **Microphone** | Required for voice interaction |
-| **API Keys** | Free Gemini API key + Free OpenRouter API key |
+| **Microphone / camera** | Optional — for voice and the VISION view |
+| **API Keys** | None |
 
 ---
 

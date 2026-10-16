@@ -1,0 +1,9 @@
+# Desktop JARVIS (python main.py):  pip install -r requirements-desktop.txt
+-r requirements.txt
+PyQt6
+numpy
+sounddevice
+faster-whisper
+opencv-python
+psutil
+mss

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="mn">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#04080c">
+  <title>J.A.R.V.I.S</title>
+  <meta name="description" content="JARVIS — Mongolian and English talking assistant with an Iron Man HUD.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%2304080c' stroke='%233fd6ff' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='11' fill='%23bff3ff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div class="logo">J.A.R.V.I.S</div>
+      <div class="sub">MARK XXXIX · WEB</div>
+    </div>
+    <div class="seg" role="tablist" aria-label="View">
+      <button role="tab" data-mode="reactor" aria-selected="true" title="Reactor view (Alt+C)">◉ REACTOR</button>
+      <button role="tab" data-mode="vision" aria-selected="false" title="Camera view (Alt+C)">◎ VISION</button>
+    </div>
+    <div class="pill" id="pill"><span class="dot"></span><span id="pill-text">STANDBY</span></div>
+    <div class="clock"><div id="clock">--:--:--</div><div id="date"></div></div>
+  </header>
+
+  <main>
+    <section class="stage" id="stage">
+      <canvas id="reactor" aria-label="JARVIS reactor"></canvas>
+      <div id="vision" class="vision" hidden>
+        <video id="cam" playsinline muted></video>
+        <canvas id="vision-canvas"></canvas>
+        <div class="cluster left">
+          <div class="gauge-row">
+            <svg viewBox="0 0 80 80" class="ring" aria-hidden="true">
+              <circle cx="40" cy="40" r="32" class="track"/><circle cx="40" cy="40" r="32" class="val" id="ring-a"/>
+              <circle cx="40" cy="40" r="22" class="track"/><circle cx="40" cy="40" r="22" class="val dim" id="ring-b"/>
+            </svg>
+            <div>
+              <div class="big">POWER</div>
+              <div class="kv">MIC <b id="g-mic">0%</b></div>
+              <div class="kv">LAT <b id="g-lat">—</b></div>
+              <div class="kv">NET <b id="g-net">—</b></div>
+            </div>
+          </div>
+          <div class="panel"><div class="ptitle">BIOMETRIC TRACE</div><pre id="trace"></pre></div>
+        </div>
+        <div class="cluster right">
+          <div class="big">COOLANT</div>
+          <div class="warn">▲ SYSTEM DIAGNOSTIC</div>
+          <dl class="diag">
+            <dt>THRUSTERS</dt><dd>STANDBY</dd><dt>REPULSORS</dt><dd>ONLINE</dd>
+            <dt>FLIGHT CTRL</dt><dd>READY</dd><dt>ARMOR</dt><dd>98%</dd>
+          </dl>
+          <div class="panel"><div class="ptitle">NEURAL STREAM</div><pre id="hex"></pre></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="chat">
+      <div class="chat-head"><span>CONVERSATION</span><span class="langs">МОНГОЛ · ENGLISH</span></div>
+      <div class="messages" id="messages" aria-live="polite"></div>
+      <div class="chips" id="chips"></div>
+      <form class="bar" id="bar" autocomplete="off">
+        <button type="button" class="icon mic" id="mic" title="Микрофон (Alt+M)" aria-label="Microphone">
+          <svg viewBox="0 0 24 24"><rect x="8.5" y="2.5" width="7" height="12" rx="3.5"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5M8.5 21.5h7"/><path class="slash" d="M4 4l16 16"/></svg>
+        </button>
+        <button type="button" class="lang" id="lang" title="Яриа таних хэл · speech language">MN</button>
+        <input id="input" placeholder="Жарвист бичих…" aria-label="Message">
+        <button type="button" class="icon voice" id="voice" title="Дуут хариу (Alt+V)" aria-label="Spoken replies">
+          <svg viewBox="0 0 24 24"><path class="fill" d="M3 9.5h4l5-4.5v14l-5-4.5H3z"/><path class="waves" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="slash" d="M4 4l16 16"/></svg>
+        </button>
+        <button type="submit" class="send" aria-label="Send">
+          <svg viewBox="0 0 24 24"><path d="M4 4l17 8-17 8 4-8z"/></svg>
+        </button>
+      </form>
+    </aside>
+  </main>
+
+  <footer>
+    <span>ALT+M MIC · ALT+V VOICE · ALT+C VISION · ESC STOP</span>
+    <span>BASED ON MARK XXXIX BY FATIHMAKES · WEB DEMO</span>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

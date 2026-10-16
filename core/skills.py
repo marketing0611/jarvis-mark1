@@ -4,18 +4,17 @@ None of them need an API key.
 """
 from __future__ import annotations
 
+import json
 import os
 import platform
 import subprocess
 import threading
+import urllib.request
 import webbrowser
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
 from urllib.parse import quote
-
-import psutil
-import requests
 
 DRY_RUN = False            # tests set this so nothing is opened or changed
 
@@ -79,8 +78,10 @@ def weather(city: str) -> dict | None:
     if DRY_RUN:
         return {"temp": -4, "feels": -9, "humidity": 60, "wind": 14, "mn": "Цэлмэг", "en": "Clear skies"}
     try:
-        r = requests.get(f"https://wttr.in/{quote(city)}", params={"format": "j1"}, timeout=8)
-        cur = r.json()["current_condition"][0]
+        req = urllib.request.Request(f"https://wttr.in/{quote(city)}?format=j1",
+                                     headers={"User-Agent": "curl/8"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            cur = json.load(r)["current_condition"][0]
     except Exception:
         return None
     code = int(cur.get("weatherCode", 0))
@@ -92,11 +93,13 @@ def weather(city: str) -> dict | None:
 
 
 def battery() -> tuple[int, bool] | None:
+    import psutil
     b = psutil.sensors_battery()
     return (round(b.percent), bool(b.power_plugged)) if b else None
 
 
 def system_status() -> dict:
+    import psutil
     return {
         "cpu":  round(psutil.cpu_percent(interval=0.3)),
         "mem":  round(psutil.virtual_memory().percent),
