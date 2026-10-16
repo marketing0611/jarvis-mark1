@@ -1,7 +1,7 @@
 """
-JARVIS demo brain — a bilingual (Mongolian / English) conversational engine that
-runs entirely on this computer. No API keys and no cloud LLM: it understands a set
-of everyday intents, keeps a little context, and can do real things via core.skills.
+JARVIS brain — a bilingual (Mongolian / English) conversational engine. Everyday
+intents (time, weather, apps, timers, ...) are handled on this computer via
+core.skills; anything else goes to Gemini (core.gemini) when an API key is set.
 
 Mongolian works in Cyrillic and in Latin transliteration ("tsag hed bolj baina").
 """
@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import Callable
 
 from core import skills
+from core.gemini import Gemini
 from memory.memory_manager import load_memory, update_memory
 
 
@@ -112,6 +113,7 @@ class Reply:
     speech: str | None = None             # shorter version to say aloud
     silent: bool = False
     fallback: bool = False                # JARVIS didn't understand
+    ai: bool = False                      # answered by Gemini
 
 
 # ── Vocabulary ───────────────────────────────────────────────────────────────
@@ -547,6 +549,7 @@ class Brain:
         self._on_reply = on_reply or (lambda r: None)
         self._on_busy  = on_busy or (lambda b: None)
         self.s = _State(name=self._load_name())
+        self.ai = Gemini()
         self._mutex = threading.Lock()
 
     # ── public ──
@@ -602,10 +605,12 @@ class Brain:
             elif greet_end and not reply.silent:
                 hello = f"{self._time_greeting(reply.lang)}, {self._addr(reply.lang)}!"
                 reply = Reply(f"{hello} {reply.text}", reply.lang,
-                              reply.speech and f"{hello} {reply.speech}")
+                              reply.speech and f"{hello} {reply.speech}", ai=reply.ai)
 
         if not reply.silent:
             self.s.last_reply = reply
+            if not reply.ai and not reply.fallback:
+                self.ai.note(raw, reply.text)
         self.s.last_lang = reply.lang
         return reply
 
@@ -634,7 +639,12 @@ class Brain:
         intent, _ = self._best_chat(msg)
         if intent:
             return self._chat_reply(intent, lang)
-        return self._fallback(msg, lang)
+        return self._ask_ai(msg, lang) or self._fallback(msg, lang)
+
+    def _ask_ai(self, msg: Message, lang: str) -> Reply | None:
+        today = datetime.now().strftime("%Y-%m-%d, %A")
+        answer = self.ai.ask(msg.raw, lang, self._addr(lang), today)
+        return Reply(answer, lang, ai=True) if answer else None
 
     def _best_chat(self, msg: Message) -> tuple[str | None, str | None]:
         best, best_lang, best_score = None, None, 0
@@ -729,6 +739,10 @@ class Brain:
                     "• Таны нэрийг санах — «Намайг Бат гэдэг»")
             speech = ("Би цаг, цаг агаар хэлж, програм нээж, хайлт хийж, таймер тавьж, тооцоо бодож, "
                       "онигоо ярьж чадна. Жагсаалтыг дэлгэц дээр харууллаа.")
+            if self.ai.available:
+                text = text.replace("Би одоогоор demo горимд ажиллаж байна. ", "") + \
+                    "\n• Бусад ямар ч асуултад Gemini-ээр хариулах"
+                speech += " Бусад асуултад Gemini-ээр хариулна."
         else:
             text = ("I'm running in demo mode. Here's what I can do:\n"
                     "• Tell the time and date\n"
@@ -743,6 +757,10 @@ class Brain:
                     "• Remember your name — \"my name is Tony\"")
             speech = ("I can tell the time and weather, open apps, search the web, set timers, do maths "
                       "and tell jokes. The full list is on screen.")
+            if self.ai.available:
+                text = text.replace("I'm running in demo mode. ", "") + \
+                    "\n• Answer anything else with Gemini"
+                speech += " Anything else, I'll ask Gemini."
         return Reply(text, lang, speech)
 
     def _say_time(self, lang: str) -> Reply:
@@ -778,7 +796,20 @@ class Brain:
 
     def _fallback(self, msg: Message, lang: str) -> Reply:
         self.s.awaiting = ("search_confirm", msg.raw)
-        if lang == "mn":
+        if self.ai.problem == "billing":
+            text = ("Gemini-ийн төлбөрийн кредит дууссан байна. AI Studio дээр billing-гүй шинэ project "
+                    "үүсгээд түлхүүр аваарай. Одоохондоо Google-ээс хайх уу?"
+                    if lang == "mn" else
+                    "Gemini says this project's prepaid credit is used up. Create a key in a project "
+                    "without billing in AI Studio. Shall I Google it for now?")
+        elif self.ai.problem == "key":
+            text = ("Gemini түлхүүр буруу байна — config/api_keys.json-оо шалгаарай. Google-ээс хайх уу?"
+                    if lang == "mn" else
+                    "Gemini rejected the API key — check config/api_keys.json. Shall I Google it instead?")
+        elif self.ai.available:                   # Gemini was asked but didn't answer
+            text = ("Gemini-тэй одоохондоо холбогдож чадсангүй. Google-ээс хайж өгөх үү?" if lang == "mn"
+                    else "I couldn't reach Gemini just now. Shall I Google it instead?")
+        elif lang == "mn":
             text = self._pick("fallback", [
                 f"Уучлаарай, {self._addr('mn')}, үүнийг сайн ойлгосонгүй. Би demo горимд байгаа. "
                 f"Google-ээс хайж өгөх үү?",

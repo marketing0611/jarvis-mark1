@@ -1,9 +1,10 @@
 """
 J.A.R.V.I.S — Mark XXXIX, local demo.
 
-Talk or type to JARVIS in Mongolian or English. Speech recognition and the
-conversation engine run on this computer with no API keys; spoken replies use
-Microsoft Edge's free neural voices when online (offline: macOS `say`, English only).
+Talk or type to JARVIS in Mongolian or English. Speech recognition and everyday
+commands run on this computer; other questions go to Gemini's free tier when
+config/api_keys.json has a "gemini_api_key". Spoken replies use Microsoft Edge's
+free neural voices when online (offline: macOS `say`, English only).
 """
 from core.brain import Brain, Reply
 from core.voice import Listener, Speaker
@@ -21,6 +22,10 @@ def main():
         speaker.say(reply.speech or reply.text, reply.lang)
 
     brain = Brain(on_reply=deliver, on_busy=ui.set_busy)
+    if brain.ai.available:
+        ui.add_note("Gemini холбогдсон  ·  Gemini on")
+    else:
+        ui.add_note("Gemini түлхүүр алга — config/api_keys.json  ·  No Gemini key, demo mode")
 
     def typed(text: str):
         speaker.stop()                     # a new request interrupts whatever JARVIS was saying
