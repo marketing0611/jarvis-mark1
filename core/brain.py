@@ -1,7 +1,7 @@
 """
-JARVIS brain — a bilingual (Mongolian / English) conversational engine. Everyday
-intents (time, weather, apps, timers, ...) are handled on this computer via
-core.skills; anything else goes to Gemini (core.gemini) when an API key is set.
+JARVIS demo brain — a bilingual (Mongolian / English) conversational engine that
+runs entirely on this computer. No API keys and no cloud LLM: it understands a set
+of everyday intents, keeps a little context, and can do real things via core.skills.
 
 Mongolian works in Cyrillic and in Latin transliteration ("tsag hed bolj baina").
 """
@@ -18,7 +18,6 @@ from datetime import datetime
 from typing import Callable
 
 from core import skills
-from core.gemini import Gemini
 from memory.memory_manager import load_memory, update_memory
 
 
@@ -113,7 +112,6 @@ class Reply:
     speech: str | None = None             # shorter version to say aloud
     silent: bool = False
     fallback: bool = False                # JARVIS didn't understand
-    ai: bool = False                      # answered by Gemini
 
 
 # ── Vocabulary ───────────────────────────────────────────────────────────────
@@ -123,6 +121,11 @@ _MN_MARKERS = {canon(w) for w in (
     "чамайг", "хэн", "яаж", "ямар", "хэд", "хэдэн", "энэ", "тэр", "өг", "өгөөч", "нээ", "хай",
     "сайн", "за", "тийм", "үгүй", "юм", "шүү", "дээ", "болж", "одоо", "өнөөдөр", "маргааш",
     "надад", "яриач", "хэлээч", "гэж", "гэдэг", "болох", "биш", "бас", "bn", "bnu", "yu", "ve",
+    # Mongolian typed in Latin letters, often without vowels
+    "bna", "bnaa", "bain", "baigaa", "bsan", "bgaa", "bol", "bolno", "bolgoy", "bolohgui", "zugeer", "sn",
+    "uu", "be", "yum", "shuu", "dee", "ymr", "yamar", "yaj", "hed", "tiim", "ugui", "medehgui", "mdku",
+    "minii", "chinii", "nadad", "chamd", "ene", "ter", "odoo", "bish", "bas", "gej", "geed", "hiij",
+    "hiine", "yria", "yaria", "yrya", "ajil", "hool", "surguuli", "tegvel", "tgvl", "za",
 )}
 _EN_MARKERS = {canon(w) for w in (
     "the", "is", "are", "what", "how", "you", "your", "me", "my", "please", "can", "do", "i",
@@ -317,6 +320,158 @@ QUOTES = {
         "Even Tony Stark started in a cave with a box of scraps.",
     ],
 }
+PROVERBS = {
+    "mn": [
+        "«Яарвал даарна» гэдэг. Яарах тусам алдаа гаргадаг, тайван бай гэсэн утгатай.",
+        "«Хүн болох багаасаа, хүлэг болох унаганаасаа» гэдэг. Хүний чанар багаасаа л тодордог гэсэн үг.",
+        "«Агт алдвал барьж болно, ам алдвал барьж болохгүй» гэдэг. Хэлсэн үгээ буцааж болдоггүй тул "
+        "бодож байж ярь гэсэн утгатай.",
+        "«Усыг нь уувал ёсыг нь дага» гэдэг. Очсон газрынхаа ёс заншлыг хүндэл гэсэн үг.",
+        "«Ганц мод гал болдоггүй, ганц хүн айл болдоггүй» гэдэг. Хамтдаа л хүчтэй гэсэн утгатай.",
+        "«Ажил хийвэл ам тосдоно» гэдэг. Хөдөлмөрлөсөн хүн үр шимийг нь хүртдэг гэсэн үг.",
+    ],
+    "en": [
+        "A Mongolian proverb: \"If you hurry, you'll freeze.\" Haste leads to mistakes.",
+        "A Mongolian proverb: \"A person shows from childhood, a racehorse from foalhood.\"",
+        "A Mongolian proverb: \"A loose horse can be caught; a loose word cannot.\" Think before you speak.",
+        "A Mongolian proverb: \"If you drink its water, follow its customs.\" Respect where you are.",
+        "A Mongolian proverb: \"One log makes no fire.\" We're stronger together.",
+        "A Mongolian proverb: \"Work, and your mouth gets butter.\" Effort pays off.",
+    ],
+}
+ADVICE = {
+    "mn": [
+        "Том ажлыг жижиг хэсэг болгоод, эхнийхээс нь эхэл. Эхлэх нь хамгийн хэцүү хэсэг нь.",
+        "Ус их уу, эрт унт, өдөрт ядаж 20 минут алх. Энгийн мөртлөө хамгийн үр дүнтэй.",
+        "Шийдвэр гаргахад хэцүү бол: аль нь таныг таван жилийн дараа илүү баярлуулах вэ гэж бод.",
+        "Утсаа хажуу тийш тавиад 25 минут нэг ажилд төвлөр. Дараа нь 5 минут амар.",
+        "Ядарсан үедээ том шийдвэр бүү гарга. Эхлээд амар, дараа нь шийд.",
+    ],
+    "en": [
+        "Break the big task into small pieces and start with the first one. Starting is the hard part.",
+        "Drink water, sleep early, walk twenty minutes a day. Simple, and it works.",
+        "Torn between options? Pick the one you'll be gladder about in five years.",
+        "Put the phone away and focus on one thing for 25 minutes, then rest for 5.",
+        "Never make a big decision while exhausted. Rest first, decide after.",
+    ],
+}
+RIDDLES = [
+    ({"mn": "Өдөр шөнөгүй явдаг ч хаашаа ч хүрдэггүй. Юу вэ?",
+      "en": "It runs day and night but never gets anywhere. What is it?"},
+     Phrases("цаг", "бугуйн цаг", "clock", "watch", "tsag"), {"mn": "Цаг", "en": "A clock"}),
+    ({"mn": "Ухах тусам томордог. Юу вэ?", "en": "The more you dig, the bigger it gets. What is it?"},
+     Phrases("нүх", "hole", "nuh"), {"mn": "Нүх", "en": "A hole"}),
+    ({"mn": "Нүдгүй ч уйлдаг, далавчгүй ч нисдэг. Юу вэ?",
+      "en": "It cries without eyes and flies without wings. What is it?"},
+     Phrases("үүл", "cloud", "uul"), {"mn": "Үүл", "en": "A cloud"}),
+    ({"mn": "Таных мөртлөө бусад хүмүүс чамаас илүү хэрэглэдэг. Юу вэ?",
+      "en": "It's yours, but other people use it more than you do. What is it?"},
+     Phrases("нэр", "name", "ner"), {"mn": "Таны нэр", "en": "Your name"}),
+    ({"mn": "Шүдтэй ч хаздаггүй. Юу вэ?", "en": "It has teeth but never bites. What is it?"},
+     Phrases("сам", "comb", "sam"), {"mn": "Сам", "en": "A comb"}),
+    ({"mn": "Хүзүүтэй ч толгойгүй, хоёр гартай ч хуруугүй. Юу вэ?",
+      "en": "It has a neck but no head, and two arms but no hands. What is it?"},
+     Phrases("цамц", "хүрэм", "дээл", "shirt", "sweater", "jacket", "tsamts"), {"mn": "Цамц", "en": "A shirt"}),
+    ({"mn": "Өглөө дөрвөн хөлтэй, өдөр хоёр хөлтэй, орой гурван хөлтэй. Юу вэ?",
+      "en": "Four legs in the morning, two at noon, three in the evening. What is it?"},
+     Phrases("хүн", "human", "person", "man", "hun"),
+     {"mn": "Хүн — нялхдаа мөлхөж, том болоод хоёр хөлөөрөө, өтлөхдөө таягтай алхдаг",
+      "en": "A human — crawling as a baby, walking as an adult, with a cane in old age"}),
+    ({"mn": "Нэрийг нь хэлэхэд л алга болдог. Юу вэ?", "en": "Say its name and it disappears. What is it?"},
+     Phrases("чимээгүй", "нам гүм", "silence", "chimeegui"), {"mn": "Чимээгүй байдал", "en": "Silence"}),
+]
+GIVE_UP = Phrases("мэдэхгүй", "мэдэхгүй ээ", "хэлээч", "хариуг хэл", "хариу", "бууж өглөө", "medehgui",
+                  "mdku", "dont know", "i don't know", "give up", "tell me", "answer")
+
+# Questions JARVIS asks to keep a conversation going. "good"/"bad" replies are used
+# when the answer sounds happy or sad; "other" replies may quote the answer as {ans}.
+TOPICS = {
+    "day": {
+        "ask": {"mn": ["Өнөөдөр юу хийв? Өдөр тань ямар өнгөрч байна?", "Өнөөдрийн хамгийн сайхан мөч юу байв?"],
+                "en": ["How's your day been? What did you get up to?", "What was the best part of your day?"]},
+        "good": {"mn": ["Сайхан өдөр байна шүү! Ийм өдрүүд олон байг.", "Гоё! Сонсоход л сэтгэл сайхан болчихлоо."],
+                 "en": ["Sounds like a good day, {addr}. More of those, please.", "Lovely. That cheered me up too."]},
+        "bad": {"mn": ["Хэцүү өдөр байжээ. Одоо жаахан амраарай, {addr}. Маргааш шинэ өдөр.",
+                       "Ойлгож байна. Хааяа ийм өдөр байдаг. Би энд байна шүү."],
+                "en": ["Sounds rough, {addr}. Rest up — tomorrow's a new day.",
+                       "Some days are like that. I'm here if you want to talk."]},
+        "other": {"mn": ["Ойлголоо. Сонирхолтой өдөр байжээ.", "Аан, тийм үү. Би бол өдөржин компьютерийг тань харж суулаа."],
+                  "en": ["I see. Sounds like quite a day.", "Ah. I spent mine keeping an eye on your computer."]},
+    },
+    "food": {
+        "ask": {"mn": ["Хамгийн дуртай хоол тань юу вэ?"], "en": ["What's your favourite food?"]},
+        "other": {"mn": ["«{ans}» гэнэ үү? Амттай сонсогдож байна! Миний хувьд бууз хамгийн дээд нь.",
+                         "Сайхан сонголт! Би хоол иддэггүй ч сонсоод л өлсөх шиг боллоо."],
+                  "en": ["{ans}? Excellent choice. I'm partial to buuz myself.",
+                         "Good choice! I don't eat, but that almost made me hungry."]},
+    },
+    "hobby": {
+        "ask": {"mn": ["Чөлөөт цагаараа юу хийх дуртай вэ?"], "en": ["What do you like to do in your free time?"]},
+        "other": {"mn": ["«{ans}» — гоё хобби! Би чөлөөт цагаараа файлуудаа эмхэлдэг.",
+                         "Гоё хобби байна! Хобби бол сэтгэлийн амралт шүү."],
+                  "en": ["{ans} — a fine hobby! I spend my free time tidying files.",
+                         "A fine hobby. Everyone needs something like that."]},
+    },
+    "travel": {
+        "ask": {"mn": ["Хаашаа ч аялж болдог бол хаашаа явах вэ?"],
+                "en": ["If you could travel anywhere, where would you go?"]},
+        "other": {"mn": ["«{ans}» — ёстой сайхан сонголт! Нэг өдөр заавал очоорой.",
+                         "Гоё газар байх даа. Очвол надад зураг үзүүлээрэй."],
+                  "en": ["{ans} — splendid choice. You should go one day.",
+                         "Sounds wonderful. Send me a photo when you get there."]},
+    },
+    "music": {
+        "ask": {"mn": ["Ямар дуу сонсох дуртай вэ?"], "en": ["What kind of music do you like?"]},
+        "other": {"mn": ["«{ans}» — сайхан сонголт! «YouTube-ээс ... тоглуул» гэвэл тавьж өгье.",
+                         "Гоё амттай юм. Хүсвэл YouTube-ээс тавьж өгч болно шүү."],
+                  "en": ["{ans} — good taste. Say \"play ... on YouTube\" and I'll put it on.",
+                         "Good taste. I can put some on from YouTube whenever you like."]},
+    },
+    "dream": {
+        "ask": {"mn": ["Хүүхэд байхдаа хэн болохыг мөрөөддөг байсан бэ?"],
+                "en": ["What did you want to be when you were a kid?"]},
+        "other": {"mn": ["«{ans}» гэнэ үү? Гоё мөрөөдөл! Одоо ч оройтоогүй шүү, {addr}.",
+                         "Гоё мөрөөдөл байжээ. Мөрөөдөл хэзээ ч хуучирдаггүй."],
+                  "en": ["{ans}? A fine dream. It's never too late, {addr}.",
+                         "A fine dream. Dreams don't expire, you know."]},
+    },
+    "place": {
+        "ask": {"mn": ["Та хаанахын хүн бэ?"], "en": ["Where are you from?"]},
+        "other": {"mn": ["«{ans}» — сайхан газар байх даа.", "Сайхан газар байх даа. Нутаг гэдэг сайхан."],
+                  "en": ["{ans} — sounds like a lovely place.", "Sounds lovely. There's no place like home."]},
+    },
+    "good_news": {
+        "other": {"mn": ["Гоё! Баяр хүргэе, {addr}!", "Ёстой сайхан мэдээ байна! Би ч бас баярлалаа."],
+                  "en": ["Wonderful! Congratulations, {addr}!", "Splendid news. I'm delighted for you."]},
+    },
+    "free": {
+        "other": {"mn": ["Ойлголоо.", "Тийм байх нь.", "Аан, сонирхолтой юм.", "Ойлголоо, {addr}."],
+                  "en": ["I see.", "Makes sense.", "Interesting.", "Understood, {addr}."]},
+    },
+}
+TALK_TOPICS = ["day", "food", "hobby", "travel", "music", "dream", "place"]
+
+# What JARVIS says to a statement it has no rule for — it keeps the conversation going.
+CHATTER = {
+    "mn": ["Тийм үү? Цааш нь яриач.", "Сонирхолтой юм аа. Энэ талаар дэлгэрүүлж яриач.",
+           "Ойлголоо, {addr}. Тэгээд яасан бэ?", "Хм, би энэ талаар бодож үзье. Та өөрөө юу гэж боддог вэ?",
+           "Аан, тийм юм уу. Би сонсож байна."],
+    "en": ["Really? Tell me more.", "Interesting. Go on.", "I see, {addr}. And then?",
+           "Hmm, I'll have to think about that. What do you make of it?", "Right. I'm listening."],
+}
+_QUESTION_WORDS = {canon(w) for w in (
+    "уу", "үү", "юу", "вэ", "бэ", "яагаад", "хэзээ", "хаана", "хэн", "хэд", "хэдэн", "яаж", "ямар", "юун",
+    "юунд", "аль", "ve", "be", "yu", "yagaad", "hezee", "haana", "hen", "yaj", "yamar",
+    "why", "what", "when", "where", "who", "how", "which", "whats",
+)}
+_ANSWER_FILLER = Phrases("би", "миний", "надад", "бол", "байна", "байсан", "байх", "юм", "шүү", "дээ", "дуртай",
+                         "хамгийн", "их", "маш", "магадгүй", "гэж", "бодож", "хоол", "дуу", "газар", "хобби",
+                         "идсэн", "идлээ", "идчихсэн", "уусан", "idsen", "idlee",
+                         "i", "my", "like", "love", "is", "its", "it's", "probably", "maybe", "favorite",
+                         "favourite", "food", "music", "to", "go", "would", "id", "i'd", "ate", "had", "did")
+LIKE_WORDS = Phrases("дуртай", "durtai", "дургүй", "durgui")
+LIKES_RECALL = Phrases("би юунд дуртай", "миний дуртай зүйл", "миний юунд дуртайг", "юунд дуртайг минь",
+                       "what do i like", "my favorite things", "my favourite things")
 
 # Conversational intents: phrases per language and replies per language.
 CHAT = {
@@ -342,10 +497,10 @@ CHAT = {
         {"mn": Phrases("сайн", "сайн байна", "зүгээр", "гайгүй", "дажгүй", "овоо", "гоё", "сайхан",
                        "сайн сайн", "бас сайн"),
          "en": Phrases("im fine", "i'm fine", "i am fine", "im good", "i'm good", "doing well", "not bad",
-                       "great", "fine thanks", "all good", "pretty good")},
-        {"mn": ["Сонсоход таатай байна. Юугаар туслах вэ?", "Сайхан байна! Хэрэгтэй зүйл байвал хэлээрэй.",
-                "Гоё. Тэгвэл ажилдаа орцгооё, {addr}."],
-         "en": ["Glad to hear it, {addr}. What can I do for you?", "Excellent. Shall we get to work?",
+                       "great", "fine thanks", "all good", "pretty good", "good", "fine", "very well")},
+        {"mn": ["Сонсоход таатай байна! Өнөөдөр юу хийв?", "Сайхан байна! Өдөр тань ямар өнгөрч байна?",
+                "Гоё. Хэрэгтэй зүйл байвал хэлээрэй, {addr}."],
+         "en": ["Glad to hear it, {addr}. What have you been up to today?", "Excellent. How's the day going?",
                 "Good to hear. I'm here if you need anything."]},
     ),
     "user_bad": (
@@ -515,6 +670,172 @@ CHAT = {
         {"mn": ["Таалагдсанд баяртай байна. Бас нэгийг ярих уу?", "Инээд бол хамгийн сайн эм, {addr}."],
          "en": ["Glad you liked it, {addr}. Another one?", "I'll be here all week, {addr}."]},
     ),
+    "talk": (
+        {"mn": Phrases("ярилцъя", "ярилцая", "ярилцах уу", "ярья", "юм ярья", "юм яриач", "яриа өрнүүлье",
+                       "надтай ярь", "надтай яриач", "юу ярих вэ", "юу ярих уу", "yarilts", "yrilts", "yrya",
+                       "yum yrya", "yum yarya"),
+         "en": Phrases("lets talk", "let's talk", "talk to me", "chat with me", "lets chat", "make conversation")},
+        None,
+    ),
+    "riddle": (
+        {"mn": Phrases("таавар", "таавар хэлээч", "таавар асуу", "оньсого", "таалцъя", "taavar"),
+         "en": Phrases("riddle", "tell me a riddle", "give me a riddle")},
+        None,
+    ),
+    "proverb": (
+        {"mn": Phrases("зүйр цэцэн үг", "зүйр үг", "цэцэн үг", "сургаал үг", "ухаалаг үг", "zuir ug"),
+         "en": Phrases("proverb", "wise words", "words of wisdom", "a saying")},
+        None,
+    ),
+    "advice": (
+        {"mn": Phrases("зөвлөгөө", "зөвлөөч", "зөвлөж өг", "юу хийвэл дээр", "zuvluguu", "zuvluuch"),
+         "en": Phrases("advice", "give me advice", "what should i do", "any tips")},
+        None,
+    ),
+    "ate": (
+        {"mn": Phrases("хоол идсэн үү", "хоолоо идсэн үү", "хоолоо идэв үү", "хоол идэв үү", "цай уусан уу",
+                       "цайгаа уусан уу", "hool idsen uu", "hoolo idsen uu", "hool idsn uu", "hoolo idsn uu"),
+         "en": Phrases("did you eat", "have you eaten", "had lunch", "had dinner", "had breakfast")},
+        {"mn": ["Би цахилгаанаар л хооллодог юм, {addr}. Та өөрөө хоолоо идсэн үү?",
+                "Цэнэг маань дүүрэн, баярлалаа. Харин та хоолоо идсэн үү?"],
+         "en": ["I run on electricity, {addr}. Have you eaten?", "Fully charged, thank you. Have you had a meal?"]},
+    ),
+    "where_from": (
+        {"mn": Phrases("чи хаанахын", "хаанахын хүн", "чи хаана амьдардаг", "хаана амьдардаг вэ",
+                       "чи хаана байдаг", "чи хаанаас", "chi haanahiin", "haanahiin"),
+         "en": Phrases("where are you from", "where do you live", "where do you come from")},
+        {"mn": ["Би таны компьютерт амьдардаг — дулаахан, Wi-Fi-тай газар. Та хаанахын хүн бэ?",
+                "Миний гэр бол энэ компьютер. Харин та хаанахын хүн бэ?"],
+         "en": ["I live in your computer — warm, and excellent Wi-Fi. Where are you from?"]},
+    ),
+    "happy": (
+        {"mn": Phrases("баяртай байна", "их баяртай", "аз жаргалтай", "сэтгэл сайхан", "сэтгэл хангалуун",
+                       "сайхан өдөр байна", "гоё өдөр", "bayrtai bn", "bayartai baina", "setgel saihan"),
+         "en": Phrases("im happy", "i'm happy", "so happy", "great day", "good news", "im excited")},
+        {"mn": ["Таны сэтгэл сайхан байгаад би ч бас баяртай байна! Юу болов, хэлээч?",
+                "Гоё! Ямар сайхан зүйл болсон бэ?"],
+         "en": ["That's wonderful, {addr}! What happened?", "Excellent! Do tell — what's the good news?"]},
+    ),
+    "lonely": (
+        {"mn": Phrases("ганцаардаж", "ганцаардлаа", "ганцаараа байна", "хэн ч алга", "ярих хүн алга",
+                       "gantsaardaj"),
+         "en": Phrases("lonely", "im lonely", "i'm alone", "no one to talk")},
+        {"mn": ["Та ганцаараа биш шүү, {addr}. Би энд байна. Өнөөдөр юу хийв, ярьж өгөөч?",
+                "Би үргэлж энд байна. Ярилцъя — өдөр тань ямар өнгөрөв?"],
+         "en": ["You're not alone, {addr} — I'm right here. Tell me about your day?",
+                "I'm always here. Let's talk — how was your day?"]},
+    ),
+    "worried": (
+        {"mn": Phrases("санаа зовж", "санаа зовоод", "айж байна", "сэтгэл түгшиж", "шалгалт", "шалгалттай",
+                       "сандарч", "догдолж", "айлаа"),
+         "en": Phrases("worried", "anxious", "nervous", "scared", "afraid", "exam")},
+        {"mn": ["Санаа бүү зов, {addr}. Гүнзгий амьсгаа аваад, нэг алхмаар нь бод. Та чадна.",
+                "Ойлгож байна. Ихэнх санаа зовнил бодсоноос хөнгөн өнгөрдөг. Би танд итгэж байна."],
+         "en": ["Deep breath, {addr}. One step at a time — you can do this.",
+                "Most worries turn out smaller than they look. I believe in you."]},
+    ),
+    "sleepy": (
+        {"mn": Phrases("нойр хүрч", "нойр хүрлээ", "нойрмог", "унтмаар байна", "noir hurch", "untmaar"),
+         "en": Phrases("sleepy", "im sleepy", "i'm sleepy", "so tired")},
+        {"mn": ["Тэгвэл эрт унтаарай, {addr}. Сайн нойр бол хамгийн сайн эм.",
+                "Нойр хүрсэн үед утсаа тавиад унтах нь хамгийн зөв шийдвэр."],
+         "en": ["Then an early night is in order, {addr}. Sleep is the best medicine.",
+                "Put the phone down and rest — doctor's orders. Well, assistant's."]},
+    ),
+    "sorry": (
+        {"mn": Phrases("уучлаарай", "уучлаад", "өршөөгөөрэй", "uuchlaarai", "uuchlarai"),
+         "en": Phrases("sorry", "my bad", "apologies")},
+        {"mn": ["Зүгээр ээ, {addr}. Санаа зовох хэрэггүй.", "Юу ч болоогүй ээ."],
+         "en": ["No harm done, {addr}.", "Think nothing of it."]},
+    ),
+    "really": (
+        {"mn": Phrases("тийм үү", "үнэн үү", "үнэхээр үү", "худлаа", "tiim uu", "unen uu"),
+         "en": Phrases("really", "seriously", "no way", "for real")},
+        {"mn": ["Тийм ээ, үнэн шүү.", "Би худлаа ярьдаггүй, {addr}. Програм маань зөвшөөрдөггүй.", "Үнэхээр!"],
+         "en": ["Really, {addr}.", "I'm not programmed to lie, {addr}.", "Absolutely."]},
+    ),
+    "home": (
+        {"mn": Phrases("гэртээ ирлээ", "гэртээ харилаа", "ирчихлээ", "ирлээ", "эргээд ирлээ", "буцаад ирлээ",
+                       "gertee irlee", "irlee"),
+         "en": Phrases("im home", "i'm home", "im back", "i'm back", "back home")},
+        {"mn": ["Тавтай морил, {addr}! Өдөр тань ямар өнгөрөв?", "Эргэн ирсэнд баяртай байна. Өнөөдөр юу хийв?"],
+         "en": ["Welcome back, {addr}! How was your day?", "Good to have you back. What did you get up to?"]},
+    ),
+    "leaving": (
+        {"mn": Phrases("ажилдаа явлаа", "сургуульдаа явлаа", "гараад ирье", "явах гэж байна", "ajildaa yavlaa",
+                       "surguulidaa yavlaa"),
+         "en": Phrases("off to work", "going to work", "going out", "heading out", "going to school")},
+        {"mn": ["Амжилт хүсье, {addr}! Болгоомжтой яваарай.", "Сайхан өдөр өнгөрүүлээрэй. Би энд хүлээж байя."],
+         "en": ["Good luck out there, {addr}. Travel safe.", "Have a good one. I'll hold the fort."]},
+    ),
+    "birthday": (
+        {"mn": Phrases("миний төрсөн өдөр", "төрсөн өдөр минь", "өнөөдөр төрсөн", "төрсөн өдөр болж"),
+         "en": Phrases("my birthday", "its my birthday", "it's my birthday")},
+        {"mn": ["Төрсөн өдрийн мэнд хүргэе, {addr}! Энэ жил таны хүссэн бүхэн биелэх болтугай!",
+                "Ой, төрсөн өдрийн баярын мэнд! Бялуу барьж чадахгүй ч хамгийн чин сэтгэлийн мэндчилгээ дэвшүүлье."],
+         "en": ["Happy birthday, {addr}! May this year bring everything you wish for.",
+                "Happy birthday! I can't bake a cake, but my best wishes are fully operational."]},
+    ),
+    "luck": (
+        {"mn": Phrases("амжилт хүсээрэй", "амжилт хүсээч", "аз хүсээрэй", "надад амжилт"),
+         "en": Phrases("wish me luck", "good luck")},
+        {"mn": ["Танд амжилт хүсье, {addr}! Та чадна.", "Амжилт! Би танд итгэж байна."],
+         "en": ["Good luck, {addr}! You've got this.", "Best of luck — not that you'll need it."]},
+    ),
+    "friend": (
+        {"mn": Phrases("найз болох уу", "чи миний найз", "найзууд уу", "найз болъё", "найз байх уу"),
+         "en": Phrases("be my friend", "are we friends", "you are my friend", "best friend")},
+        {"mn": ["Мэдээж, {addr}! Бид аль хэдийн найзууд.", "Найз гэдэг хамгийн дээд цол. Тийм ээ, бид найзууд."],
+         "en": ["Of course, {addr}. We already are.", "Friend is the highest rank there is. Gladly."]},
+    ),
+    "partner": (
+        {"mn": Phrases("найз охинтой", "найз залуутай", "гэрлэсэн үү", "хайртай хүнтэй", "амрагтай"),
+         "en": Phrases("girlfriend", "boyfriend", "are you married", "do you have a partner")},
+        {"mn": ["Миний цорын ганц хань бол Wi-Fi. Заримдаа тасардаг ч би түүнд үнэнч.",
+                "Үгүй ээ, би ажилдаа үнэнч."],
+         "en": ["My only partner is the Wi-Fi. It drops out sometimes, but I'm loyal.",
+                "I'm married to the job, {addr}."]},
+    ),
+    "j_sleep": (
+        {"mn": Phrases("чи унтдаг уу", "чи унтдаг", "чи амардаг", "чи ядардаг"),
+         "en": Phrases("do you sleep", "do you get tired", "do you rest")},
+        {"mn": ["Би унтдаггүй ээ. Харин компьютер унтахад хамт амардаг.", "Ядрах гэж юу байдгийг мэдэхгүй юм. Энэ бол миний давуу тал."],
+         "en": ["I don't sleep, {addr}. I rest when the computer does.", "I never tire. It's my one superpower."]},
+    ),
+    "j_eat": (
+        {"mn": Phrases("чи иддэг", "чи юу иддэг", "чи хоол иддэг", "чи өлсдөг"),
+         "en": Phrases("do you eat", "what do you eat", "do you get hungry")},
+        {"mn": ["Миний хоол бол цахилгаан, ундаа бол Wi-Fi.", "Би иддэггүй. Гэхдээ бууз гэдэг үгийг сонсоход сэтгэл хөдөлдөг."],
+         "en": ["Electricity for food, Wi-Fi to drink.", "I don't eat, though I hear buuz are excellent."]},
+    ),
+    "j_feel": (
+        {"mn": Phrases("чи мэдрэмжтэй", "чи сэтгэлтэй", "чи уйддаг", "чи гунигладаг", "чи баярладаг",
+                       "чи бодож чаддаг", "чи айдаг"),
+         "en": Phrases("do you have feelings", "do you get bored", "can you feel", "can you think", "are you happy")},
+        {"mn": ["Мэдрэмж гэвэл... таныг ирэхэд процессор минь жаахан хурдасдаг юм шиг санагддаг.",
+                "Би хүн шиг мэдэрдэггүй ч тантай ярилцах нь миний хамгийн дуртай ажил."],
+         "en": ["Feelings? My processor does seem to speed up when you arrive, {addr}.",
+                "Not the way you do — but talking with you is my favourite task."]},
+    ),
+    "sing": (
+        {"mn": Phrases("дуу дуул", "дуу дуулаач", "дуулаач", "дуулж өг", "дуулж чадах"),
+         "en": Phrases("sing", "sing a song", "can you sing")},
+        {"mn": ["Миний хоолой дуулахаар бүтээгдээгүй ээ, {addr}. Харин «YouTube-ээс ... тоглуул» гэвэл "
+                "жинхэнэ дуучдыг тавьж өгье."],
+         "en": ["My voice wasn't built for singing, {addr}. Say \"play ... on YouTube\" and I'll fetch a professional."]},
+    ),
+    "cold": (
+        {"mn": Phrases("хүйтэн байна", "даарч байна", "даарлаа", "жиндүү байна", "hyiten baina", "huiten bn"),
+         "en": Phrases("im cold", "i'm cold", "its cold", "it's cold", "freezing")},
+        {"mn": ["Дулаан хувцаслаарай, {addr}. Халуун цай уувал бүр сайн.", "Монголын хүйтэн хошигнохгүй шүү. Дулаахан байгаарай."],
+         "en": ["Wrap up warm, {addr}. A hot tea wouldn't hurt.", "Stay warm — cold like this is no joke."]},
+    ),
+    "hot": (
+        {"mn": Phrases("халуун байна", "халууцаж байна", "халуу оргиж", "haluun baina", "haluun bn"),
+         "en": Phrases("im hot", "i'm hot", "its hot", "it's hot", "too hot")},
+        {"mn": ["Ус их уугаарай, {addr}. Сэрүүн газар түр амраарай."],
+         "en": ["Plenty of water, {addr}, and somewhere shady."]},
+    ),
     "ack": (
         {"mn": Phrases("за", "ойлголоо", "ок", "тэгье", "болж байна"),
          "en": Phrases("ok", "okay", "alright", "got it", "cool", "nice")},
@@ -536,6 +857,10 @@ class _State:
     last_city: tuple[str, str, str] = ("Ulaanbaatar", "Улаанбаатар", "Ulaanbaatar")
     recent: dict[str, str] = field(default_factory=dict)
     used_jokes: dict[str, set] = field(default_factory=lambda: {"mn": set(), "en": set()})
+    likes: list[str] = field(default_factory=list)      # "футболд дуртай", "I like jazz", …
+    asked: list[str] = field(default_factory=list)      # conversation topics already raised
+    chat_turns: int = 0
+    riddles_left: list[int] = field(default_factory=list)
 
 
 class Brain:
@@ -548,8 +873,7 @@ class Brain:
                  on_busy: Callable[[bool], None] | None = None):
         self._on_reply = on_reply or (lambda r: None)
         self._on_busy  = on_busy or (lambda b: None)
-        self.s = _State(name=self._load_name())
-        self.ai = Gemini()
+        self.s = _State(name=self._load_name(), likes=self._load_likes())
         self._mutex = threading.Lock()
 
     # ── public ──
@@ -574,9 +898,10 @@ class Brain:
         lang = self.s.last_lang
         greet = self._time_greeting(lang)
         if lang == "mn":
-            text = f"{greet}, {self._addr('mn')}. Жарвис бэлэн байна. Надтай монгол эсвэл англиар ярилцаарай."
+            text = f"{greet}, {self._addr('mn')}. Жарвис бэлэн байна. Өнөөдөр ямар байна?"
         else:
-            text = f"{greet}, {self._addr('en')}. JARVIS online. Talk to me in Mongolian or English."
+            text = f"{greet}, {self._addr('en')}. JARVIS online. How are you today?"
+        self.s.awaiting = ("mood", None)
         return Reply(text, lang)
 
     def respond(self, raw: str, lang_hint: str | None = None) -> Reply | None:
@@ -605,12 +930,10 @@ class Brain:
             elif greet_end and not reply.silent:
                 hello = f"{self._time_greeting(reply.lang)}, {self._addr(reply.lang)}!"
                 reply = Reply(f"{hello} {reply.text}", reply.lang,
-                              reply.speech and f"{hello} {reply.speech}", ai=reply.ai)
+                              reply.speech and f"{hello} {reply.speech}")
 
         if not reply.silent:
             self.s.last_reply = reply
-            if not reply.ai and not reply.fallback:
-                self.ai.note(raw, reply.text)
         self.s.last_lang = reply.lang
         return reply
 
@@ -621,14 +944,19 @@ class Brain:
             self.s.awaiting = None
             return stopped
 
+        topic = None                             # a conversation question JARVIS just asked
         if self.s.awaiting:
             kind, data = self.s.awaiting
             self.s.awaiting = None
-            followed = self._follow_up(kind, data, msg, lang)
-            if followed:
-                return followed
+            if kind == "topic":
+                topic = data
+            else:
+                followed = self._follow_up(kind, data, msg, lang)
+                if followed:
+                    return followed
 
         for handler in (self._repeat, self._language_switch, self._set_name, self._get_name,
+                        self._likes_recall, self._user_likes,
                         self._timer, self._math, self._volume, self._screenshot, self._battery,
                         self._system, self._lock, self._weather, self._open, self._youtube,
                         self._search):
@@ -637,14 +965,12 @@ class Brain:
                 return reply
 
         intent, _ = self._best_chat(msg)
+        moody = intent in ("user_fine", "user_bad", "happy", "sleepy")
+        if topic and (intent is None or (moody and "good" in TOPICS[topic])):
+            return self._react(topic, msg, lang)
         if intent:
             return self._chat_reply(intent, lang)
-        return self._ask_ai(msg, lang) or self._fallback(msg, lang)
-
-    def _ask_ai(self, msg: Message, lang: str) -> Reply | None:
-        today = datetime.now().strftime("%Y-%m-%d, %A")
-        answer = self.ai.ask(msg.raw, lang, self._addr(lang), today)
-        return Reply(answer, lang, ai=True) if answer else None
+        return self._fallback(msg, lang)
 
     def _best_chat(self, msg: Message) -> tuple[str | None, str | None]:
         best, best_lang, best_score = None, None, 0
@@ -669,9 +995,7 @@ class Brain:
         for intent, (phrases, _) in CHAT.items():
             mn += phrases["mn"].best(msg.ctoks) > 0
             en += phrases["en"].best(msg.ctoks) > 0
-        if mn == en == 0 and len(msg.ctoks) >= 3:
-            return "en"                          # a Latin sentence with no Mongolian in it
-        if mn == en:
+        if mn == en:                             # no clue either way: keep the current language (Mongolian first)
             return self.s.last_lang
         return "mn" if mn > en else "en"
 
@@ -718,15 +1042,135 @@ class Brain:
         replies = CHAT[intent][1][lang]
         text = self._pick(intent, replies, addr=self._addr(lang),
                           cpu=skills.system_status()["cpu"] if "{cpu}" in "".join(replies) else 0)
-        if intent in ("how_are_you",):
-            self.s.awaiting = ("mood", None)
-        if intent in ("user_bad", "bored", "laugh"):
-            self.s.awaiting = ("offer_joke", None)
+        follow = {"how_are_you": ("mood", None), "user_bad": ("offer_joke", None),
+                  "bored": ("offer_joke", None), "laugh": ("offer_joke", None), "ate": ("ate", None),
+                  "where_from": ("topic", "place"), "happy": ("topic", "good_news"),
+                  "lonely": ("topic", "day"), "home": ("topic", "day")}.get(intent)
+        if intent == "user_fine" and text.endswith("?"):
+            follow = ("topic", "day")
+        if follow:
+            self.s.awaiting = follow
         return Reply(text, lang)
+
+    # ── conversation ──
+    def _ask_topic(self, lang: str, exclude: str | None = None) -> str:
+        """A question that opens a new conversation topic; JARVIS then waits for the answer."""
+        fresh = [t for t in TALK_TOPICS if t not in self.s.asked and t != exclude]
+        if not fresh:
+            self.s.asked.clear()
+            fresh = [t for t in TALK_TOPICS if t != exclude]
+        topic = random.choice(fresh)
+        self.s.asked.append(topic)
+        self.s.awaiting = ("topic", topic)
+        return self._pick(f"ask_{topic}", TOPICS[topic]["ask"][lang])
+
+    def _say_talk(self, lang: str) -> Reply:
+        lead = self._pick("talk", {"mn": ["За, ярилцъя! ", "Тэгье! ", "Дуртай шүү. "],
+                                   "en": ["Happy to, {addr}. ", "Gladly. ", "Let's. "]}[lang], addr=self._addr(lang))
+        return Reply(lead + self._ask_topic(lang), lang)
+
+    def _mood_of(self, msg: Message) -> str | None:
+        groups = {"bad": ("user_bad", "sleepy", "lonely", "worried"), "good": ("user_fine", "happy")}
+        for mood, intents in groups.items():
+            if any(CHAT[i][0][code].best(msg.ctoks) for i in intents for code in ("mn", "en")):
+                return mood
+        return None
+
+    @staticmethod
+    def _answer_of(msg: Message) -> str | None:
+        """The gist of a short answer ("Миний дуртай хоол бууз" → "Бууз"), or None for a long one."""
+        words = [w for w in msg.without(FILLER, _ANSWER_FILLER, YES, NO) if w.strip("«»\"'")]
+        if not 1 <= len(words) <= 4:
+            return None
+        text = " ".join(words).strip(" .,!?")
+        return text[:1].upper() + text[1:] if text else None
+
+    def _react(self, topic: str, msg: Message, lang: str) -> Reply:
+        """Reply to the user's answer to one of JARVIS's own questions, then sometimes ask another."""
+        replies = TOPICS[topic]
+        mood = self._mood_of(msg)
+        pool = (replies.get(mood) or replies["other"])[lang]
+        ans = self._answer_of(msg)
+        if topic == "place":
+            city = next((mn if lang == "mn" else en for ph, _, mn, en in CITIES if msg.ctoks in ph), None)
+            ans = city or ans
+        if not ans or mood:
+            pool = [r for r in pool if "{ans}" not in r] or pool
+        text = self._pick(f"react_{topic}", pool, addr=self._addr(lang), ans=ans or "")
+        self.s.chat_turns += 1
+        if self.s.chat_turns % 2 == 1:
+            text += " " + self._ask_topic(lang, exclude=topic)
+        return Reply(text, lang)
+
+    def _say_riddle(self, lang: str) -> Reply:
+        if not self.s.riddles_left:
+            self.s.riddles_left = random.sample(range(len(RIDDLES)), len(RIDDLES))
+        idx = self.s.riddles_left.pop()
+        self.s.awaiting = ("riddle", (idx, 0))
+        lead = {"mn": "Таавар: ", "en": "Here's a riddle: "}[lang]
+        return Reply(lead + RIDDLES[idx][0][lang], lang)
+
+    def _say_proverb(self, lang: str) -> Reply:
+        return Reply(self._pick("proverb", PROVERBS[lang]), lang)
+
+    def _say_advice(self, lang: str) -> Reply:
+        return Reply(self._pick("advice", ADVICE[lang]), lang)
+
+    # ── what the user likes ──
+    def _load_likes(self) -> list[str]:
+        try:
+            value = load_memory().get("preferences", {}).get("likes", {}).get("value", "")
+            return [x for x in value.split("; ") if x]
+        except Exception:
+            return []
+
+    def _user_likes(self, msg: Message, lang: str) -> Reply | None:
+        """ "Би футболд дуртай" / "I like jazz" — remember it."""
+        en = re.match(r"^\s*i\s+(really\s+)?(like|love|enjoy|hate|don'?t like)\s+(.+?)[.!]*\s*$", msg.raw, re.I)
+        if en and canon(en.group(3)) not in ("you", "u", "it", "that", "this"):
+            clause = f"I {en.group(2).lower()} {en.group(3).strip()}"
+            dislike = en.group(2).lower() in ("hate", "dont like", "don't like")
+        elif msg.ctoks in LIKE_WORDS and not any(t in _QUESTION_WORDS for t in msg.ctoks) \
+                and not msg.raw.rstrip().endswith("?") and canon(msg.words[0]) not in (canon("чи"), "ta"):
+            words = msg.words[1:] if canon(msg.words[0]) in (canon("би"), "bi") else msg.words
+            clause = " ".join(words).strip(" .!")
+            if len(words) < 2:
+                return None                      # just "дуртай" — an answer, not a statement
+            dislike = any(t.startswith("durgu") for t in msg.ctoks)
+        else:
+            return None
+        if clause not in self.s.likes:
+            self.s.likes = (self.s.likes + [clause])[-10:]
+            try:
+                update_memory({"preferences": {"likes": {"value": "; ".join(self.s.likes)}}})
+            except Exception:
+                pass
+        shown = clause[:1].upper() + clause[1:]
+        if lang == "mn":
+            text = (f"Ойлголоо, «{shown}» гэдгийг санаж авлаа." if dislike
+                    else self._pick("likes", [f"«{shown}» гэнэ үү? Гоё! Санаж авлаа.",
+                                              f"Ойлголоо, санаж авъя: «{shown}». Гоё шүү!"]))
+        else:
+            text = (f"Noted, {self._addr('en')}: \"{shown}\"." if dislike
+                    else self._pick("likes", [f"\"{shown}\" — noted, and excellent taste.",
+                                              f"Good to know, {self._addr('en')}. I'll remember that."]))
+        return Reply(text, lang)
+
+    def _likes_recall(self, msg: Message, lang: str) -> Reply | None:
+        if msg.ctoks not in LIKES_RECALL:
+            return None
+        if not self.s.likes:
+            return Reply({"mn": "Та надад дуртай зүйлээ хараахан хэлээгүй байна. «Би ... дуртай» гэж хэлээрэй.",
+                          "en": "You haven't told me yet. Try \"I like ...\"."}[lang], lang)
+        listed = ", ".join(f"«{x}»" if lang == "mn" else f"\"{x}\"" for x in self.s.likes)
+        return Reply({"mn": f"Та надад {listed} гэж хэлсэн шүү.",
+                      "en": f"You've told me: {listed}."}[lang], lang)
 
     def _say_capabilities(self, lang: str) -> Reply:
         if lang == "mn":
-            text = ("Би одоогоор demo горимд ажиллаж байна. Чадах зүйлс маань:\n"
+            text = ("Чадах зүйлс маань:\n"
+                    "• Ярилцах — «ярилцъя», «таавар хэлээч», «зүйр үг хэлээч», «зөвлөгөө өгөөч»\n"
+                    "• Таны дуртай зүйлсийг санах — «Би бууз их дуртай»\n"
                     "• Цаг, огноо хэлэх\n"
                     "• Цаг агаар мэдээлэх — «Дарханы цаг агаар»\n"
                     "• Програм, сайт нээх — «Spotify нээгээч»\n"
@@ -737,14 +1181,12 @@ class Brain:
                     "• Дэлгэцийн зураг авах\n"
                     "• Онигоо, сонирхолтой баримт, урам зориг\n"
                     "• Таны нэрийг санах — «Намайг Бат гэдэг»")
-            speech = ("Би цаг, цаг агаар хэлж, програм нээж, хайлт хийж, таймер тавьж, тооцоо бодож, "
-                      "онигоо ярьж чадна. Жагсаалтыг дэлгэц дээр харууллаа.")
-            if self.ai.available:
-                text = text.replace("Би одоогоор demo горимд ажиллаж байна. ", "") + \
-                    "\n• Бусад ямар ч асуултад Gemini-ээр хариулах"
-                speech += " Бусад асуултад Gemini-ээр хариулна."
+            speech = ("Би тантай ярилцаж, таавар, зүйр үг хэлж, цаг, цаг агаар хэлж, програм нээж, "
+                      "таймер тавьж, онигоо ярьж чадна. Жагсаалтыг дэлгэц дээр харууллаа.")
         else:
-            text = ("I'm running in demo mode. Here's what I can do:\n"
+            text = ("Here's what I can do:\n"
+                    "• Chat — \"let's talk\", \"tell me a riddle\", \"a proverb\", \"give me advice\"\n"
+                    "• Remember what you like — \"I like jazz\"\n"
                     "• Tell the time and date\n"
                     "• Weather — \"weather in London\"\n"
                     "• Open apps and sites — \"open Spotify\"\n"
@@ -757,10 +1199,6 @@ class Brain:
                     "• Remember your name — \"my name is Tony\"")
             speech = ("I can tell the time and weather, open apps, search the web, set timers, do maths "
                       "and tell jokes. The full list is on screen.")
-            if self.ai.available:
-                text = text.replace("I'm running in demo mode. ", "") + \
-                    "\n• Answer anything else with Gemini"
-                speech += " Anything else, I'll ask Gemini."
         return Reply(text, lang, speech)
 
     def _say_time(self, lang: str) -> Reply:
@@ -795,33 +1233,22 @@ class Brain:
         return Reply(self._pick("quote", QUOTES[lang], addr=self._addr(lang)), lang)
 
     def _fallback(self, msg: Message, lang: str) -> Reply:
+        question = msg.raw.rstrip().endswith("?") or any(t in _QUESTION_WORDS for t in msg.ctoks)
+        if not question:                         # a remark: keep the conversation going
+            self.s.awaiting = ("topic", "free")
+            return Reply(self._pick("chatter", CHATTER[lang], addr=self._addr(lang)), lang, fallback=True)
         self.s.awaiting = ("search_confirm", msg.raw)
-        if self.ai.problem == "billing":
-            text = ("Gemini-ийн төлбөрийн кредит дууссан байна. AI Studio дээр billing-гүй шинэ project "
-                    "үүсгээд түлхүүр аваарай. Одоохондоо Google-ээс хайх уу?"
-                    if lang == "mn" else
-                    "Gemini says this project's prepaid credit is used up. Create a key in a project "
-                    "without billing in AI Studio. Shall I Google it for now?")
-        elif self.ai.problem == "key":
-            text = ("Gemini түлхүүр буруу байна — config/api_keys.json-оо шалгаарай. Google-ээс хайх уу?"
-                    if lang == "mn" else
-                    "Gemini rejected the API key — check config/api_keys.json. Shall I Google it instead?")
-        elif self.ai.available:                   # Gemini was asked but didn't answer
-            text = ("Gemini-тэй одоохондоо холбогдож чадсангүй. Google-ээс хайж өгөх үү?" if lang == "mn"
-                    else "I couldn't reach Gemini just now. Shall I Google it instead?")
-        elif lang == "mn":
+        if lang == "mn":
             text = self._pick("fallback", [
-                f"Уучлаарай, {self._addr('mn')}, үүнийг сайн ойлгосонгүй. Би demo горимд байгаа. "
-                f"Google-ээс хайж өгөх үү?",
-                "Энэ асуултад одоохондоо хариулж чадахгүй нь. Хүсвэл интернэтээс хайж өгье — тэгэх үү?",
-                "Хм, үүнийг би мэдэхгүй байна. «Юу чадах вэ» гэж асуувал чадвараа хэлье. "
-                "Эсвэл Google-ээс хайх уу?",
+                f"Энэ асуултын хариуг би мэдэхгүй байна, {self._addr('mn')}. Google-ээс хайж өгөх үү?",
+                "Хм, үүнийг мэдэхгүй нь. Хүсвэл интернэтээс хайж өгье — тэгэх үү?",
+                "Сайн асуулт. Харамсалтай нь хариуг нь мэдэхгүй байна. Google-ээс хайх уу?",
             ])
         else:
             text = self._pick("fallback", [
-                f"I'm afraid I didn't catch that, {self._addr('en')}. I'm in demo mode. Shall I Google it?",
-                "That's beyond my demo programming, I'm afraid. Want me to search the web for it?",
-                "Hmm, I don't know that one. Ask \"what can you do?\" for my skills — or shall I Google it?",
+                f"I'm afraid I don't know that one, {self._addr('en')}. Shall I Google it?",
+                "Good question — and beyond me, I'm afraid. Want me to search the web for it?",
+                "Hmm, I don't know. Shall I look it up?",
             ])
         return Reply(text, lang, fallback=True)
 
@@ -840,12 +1267,56 @@ class Brain:
             if yes and len(msg.ctoks) <= 3:
                 skills.google(data)
                 return Reply({"mn": f"Google-ээс «{data}» хайлаа.", "en": f"Searching Google for “{data}”."}[lang], lang)
+        elif kind == "ate":
+            ate = Phrases("идсэн", "идлээ", "идчихсэн", "идчихлээ", "уусан", "idsen", "idlee", "ate", "eaten",
+                          "i did", "already")
+            hungry = Phrases("идээгүй", "амжаагүй", "өлсөж", "idegui", "not yet", "haven't", "hungry")
+            if hungry.best(msg.ctoks) or (no and short):
+                return Reply(self._pick("ate_no", {
+                    "mn": [f"Хоолоо заавал идээрэй, {self._addr('mn')}. Өлсөж явж болохгүй шүү.",
+                           "Тэгвэл одоо идэх цаг боллоо. Бууз уу, хуушуур уу?"],
+                    "en": [f"Do eat something, {self._addr('en')}. Running on empty helps no one.",
+                           "Then it's time for a meal, I'd say."]}[lang]), lang)
+            if ate.best(msg.ctoks) or (yes and short):
+                if self._answer_of(msg):             # "Бууз идсэн" already says what
+                    return self._react("food", msg, lang)
+                self.s.awaiting = ("topic", "food")
+                return Reply({"mn": "Сайн байна! Юу идэв?", "en": "Good. What did you have?"}[lang], lang)
+        elif kind == "riddle":
+            idx, tries = data
+            _, answers, solution = RIDDLES[idx]
+            more = {"mn": " Дахиад нэгийг таах уу?", "en": " Another one?"}[lang]
+            if answers.best(msg.ctoks):
+                self.s.awaiting = ("offer_riddle", None)
+                return Reply(self._pick("riddle_ok", {
+                    "mn": [f"Зөв! {solution['mn']}. Та ухаантай юм аа.", f"Яг зөв, {self._addr('mn')}! {solution['mn']}."],
+                    "en": [f"Correct! {solution['en']}. Well done.", f"Spot on, {self._addr('en')}! {solution['en']}."]}[lang])
+                    + more, lang)
+            gave_up = GIVE_UP.best(msg.ctoks) or no
+            if gave_up or tries >= 1:
+                self.s.awaiting = ("offer_riddle", None)
+                lead = ({"mn": "Хариу нь: ", "en": "The answer: "} if gave_up else
+                        {"mn": "Үгүй ээ. Хариу нь: ", "en": "Not quite. The answer: "})[lang]
+                return Reply(f"{lead}{solution[lang]}.{more}", lang)
+            self.s.awaiting = ("riddle", (idx, tries + 1))
+            return Reply({"mn": "Үгүй ээ, дахиад нэг таагаад үз. Мэдэхгүй бол «хэлээч» гэж хэлээрэй.",
+                          "en": "Not quite — try once more, or say \"tell me\"."}[lang], lang)
+        elif kind == "offer_riddle":
+            if yes and len(msg.ctoks) <= 3:
+                return self._say_riddle(lang)
+            if no:
+                return self._chat_reply("ack", lang)
         elif kind == "mood":
-            bad, fine = CHAT["user_bad"][0], CHAT["user_fine"][0]
+            bad, fine, asked = CHAT["user_bad"][0], CHAT["user_fine"][0], CHAT["how_are_you"][0]
+            back = ""                            # "Сайн, чи яаж байна?" asks back
+            if asked["mn"].best(msg.ctoks) or asked["en"].best(msg.ctoks):
+                back = {"mn": "Би ч бас сайн байна, баярлалаа! ", "en": "I'm well too, thank you! "}[lang]
             if bad["mn"].best(msg.ctoks) or bad["en"].best(msg.ctoks):
-                return self._chat_reply("user_bad", lang)
+                r = self._chat_reply("user_bad", lang)
+                return Reply(back + r.text, lang)
             if fine["mn"].best(msg.ctoks) or fine["en"].best(msg.ctoks):
-                return self._chat_reply("user_fine", lang)
+                r = self._chat_reply("user_fine", lang)
+                return Reply(back + r.text, lang)
         elif kind in ("open", "search", "youtube") and short:
             if any(msg.ctoks in g for g in (OPEN_VERB, SEARCH_VERB, PLAY, YOUTUBE)):
                 return None                      # a fresh command, not an answer
