@@ -2,7 +2,7 @@
 <html lang="mn">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#04080c">
   <title>J.A.R.V.I.S</title>
   <meta name="description" content="JARVIS — Mongolian and English talking assistant with an Iron Man HUD.">
@@ -16,8 +16,8 @@
       <div class="sub">MARK XXXIX · WEB</div>
     </div>
     <div class="seg" role="tablist" aria-label="View">
-      <button role="tab" data-mode="reactor" aria-selected="true" title="Reactor view (Alt+C)">◉ REACTOR</button>
-      <button role="tab" data-mode="vision" aria-selected="false" title="Camera view (Alt+C)">◎ VISION</button>
+      <button role="tab" data-mode="reactor" aria-selected="true" title="Reactor view (Alt+C)"><span class="glyph">◉</span> REACTOR</button>
+      <button role="tab" data-mode="vision" aria-selected="false" title="Camera view (Alt+C)"><span class="glyph">◎</span> VISION</button>
     </div>
     <div class="pill" id="pill"><span class="dot"></span><span id="pill-text">STANDBY</span></div>
     <div class="clock"><div id="clock">--:--:--</div><div id="date"></div></div>
@@ -65,7 +65,7 @@
           <svg viewBox="0 0 24 24"><rect x="8.5" y="2.5" width="7" height="12" rx="3.5"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5M8.5 21.5h7"/><path class="slash" d="M4 4l16 16"/></svg>
         </button>
         <button type="button" class="lang" id="lang" title="Яриа таних хэл · speech language">MN</button>
-        <input id="input" placeholder="Жарвист бичих…" aria-label="Message">
+        <input id="input" placeholder="Жарвист бичих…" aria-label="Message" enterkeyhint="send">
         <button type="button" class="icon voice" id="voice" title="Дуут хариу (Alt+V)" aria-label="Spoken replies">
           <svg viewBox="0 0 24 24"><path class="fill" d="M3 9.5h4l5-4.5v14l-5-4.5H3z"/><path class="waves" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="slash" d="M4 4l16 16"/></svg>
         </button>

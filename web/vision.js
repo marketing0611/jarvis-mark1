@@ -1,10 +1,11 @@
 // VISION view: the webcam seen from inside an Iron Man helmet, with an overlay that
 // follows the face. Face tracking runs in the browser with MediaPipe (nothing is uploaded).
-import { C, rgba, font, fitCanvas, paintReadouts, paintState } from "./hud.js";
+import { C, rgba, font, fitCanvas, paintReadouts, paintState, isCompact } from "./hud.js";
 
 const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite";
 const ICE = C.ice;
+const TAP = matchMedia("(pointer: coarse)").matches ? "tap" : "click";
 
 const TRACE = [
   m => `track.lock(eye='L', conf=${m.conf.toFixed(2)})`, () => "mesh.align(pts=9) ........ OK",
@@ -26,6 +27,18 @@ const GLYPH_SPOTS = [[0.30, 0.16], [0.55, 0.10], [0.74, 0.20], [0.14, 0.52], [0.
 function rnd(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
 function hex(n) { return Math.floor(Math.random() * 16 ** n).toString(16).toUpperCase().padStart(n, "0"); }
 function sign(v, d = 2) { return (v >= 0 ? "+" : "") + v.toFixed(d); }
+
+/** Break text into lines no wider than maxW, at the context's current font. */
+function wrap(ctx, text, maxW) {
+  const lines = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(next).width > maxW) { lines.push(line); line = word; } else line = next;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
 
 function visorPath(W, H) {
   const p = new Path2D(), P = (x, y) => [W * x, H * y];
@@ -213,23 +226,24 @@ export class Vision {
     ctx.restore();
     ctx.fillStyle = rgba(ICE, 10); ctx.fillRect(0, 0, W, H);
 
+    const compact = isCompact(W, H), stateY = H * 0.885 - (compact ? 30 : 40);
     ctx.drawImage(this.helmetLayer(W, H), 0, 0, W, H);
     this.paintHeading(ctx, W, H);
     this.paintHorizon(ctx, W, H);
-    if (!live) this.paintPlaceholder(ctx, W, H);
-    else if (f) this.paintFace(ctx, f, s, ox, oy, H);
-    else this.paintSearching(ctx, W, H);
+    if (!live) this.paintPlaceholder(ctx, W, H, compact);
+    else if (f) this.paintFace(ctx, f, s, ox, oy, stateY);
+    else this.paintSearching(ctx, W, H, compact);
 
     const tracking = f && live ? "LOCKED" : live ? "SEARCHING" : "—";
     paintReadouts(ctx, W, H, {
       tl: [["VISION", live ? "ONLINE" : "OFFLINE"], ["TRACKING", tracking]],
       tr: [["FPS", this.fps.toFixed(0)], ["DETECTOR", this.detectorName]],
-    }, W * 0.1, H * 0.12);
-    paintState(ctx, W, H * 0.885 - 40, this.label, this.color);
+    }, W * 0.1, H * 0.12, { scale: compact ? 0.8 : 1 });
+    if (live || !compact) paintState(ctx, W, stateY, this.label, this.color, compact);   // small screens: the notice needs the room
   }
 
   paintHeading(ctx, W, H) {
-    const cx = W / 2, y = H * 0.11, half = W * 0.17, heading = ((47 + this.yaw * 1.5) % 360 + 360) % 360, ppd = half / 30;
+    const cx = W / 2, y = Math.max(H * 0.11, 34), half = W * 0.17, heading = ((47 + this.yaw * 1.5) % 360 + 360) % 360, ppd = half / 30;
     font(ctx, 9, { weight: 700, mono: true, spacing: 1 }); ctx.textAlign = "center"; ctx.textBaseline = "top";
     for (let d = Math.floor(heading) - 30; d <= heading + 30; d++) {
       if (d % 5) continue;
@@ -250,14 +264,14 @@ export class Vision {
   paintHorizon(ctx, W, H) {
     ctx.save();
     ctx.translate(W / 2, H * 0.5 + this.pitch * 3); ctx.rotate(this.roll * Math.PI / 180);
-    const inner = W * 0.19, outer = W * 0.3;
+    const inner = W * 0.19, outer = W * 0.3, rung = 3.2 * Math.min(1, H / 520);
     ctx.strokeStyle = rgba(ICE, 150); ctx.lineWidth = 1.6;
     for (const s of [-1, 1]) {
       ctx.beginPath(); ctx.moveTo(s * outer, 0); ctx.lineTo(s * inner, 0); ctx.lineTo(s * inner, 8); ctx.stroke();
     }
     font(ctx, 8.5, { weight: 700, mono: true }); ctx.textAlign = "left"; ctx.textBaseline = "middle";
     for (const step of [-20, -10, 10, 20]) {
-      const y = -step * 3.2;
+      const y = -step * rung;
       ctx.strokeStyle = ctx.fillStyle = rgba(ICE, 70); ctx.lineWidth = 1; ctx.setLineDash(step < 0 ? [4, 4] : []);
       for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * inner, y); ctx.lineTo(s * (inner + W * 0.05), y); ctx.stroke(); }
       ctx.fillText((step > 0 ? "+" : "") + step, outer - W * 0.06, y);
@@ -291,29 +305,32 @@ export class Vision {
     }
   }
 
-  paintSearching(ctx, W, H) {
-    const cx = W / 2, cy = H * 0.45, r = Math.min(W, H) * 0.14;
+  paintSearching(ctx, W, H, compact) {
+    const cx = W / 2, cy = H * (compact ? 0.37 : 0.45), r = Math.min(W, H) * (compact ? 0.1 : 0.14), y = cy + r * 2.15;
     this.paintReticle(ctx, cx, cy, r, this.t * 60);
     ctx.textAlign = "center"; ctx.textBaseline = "top";
-    font(ctx, 12, { weight: 700, mono: true, spacing: 4 }); ctx.fillStyle = rgba(ICE, 220);
-    ctx.fillText(this.detector ? "SCANNING FOR SUBJECT" : "LOADING TRACKER", cx, cy + r * 2.1);
-    font(ctx, 14); ctx.fillStyle = C.text2;
-    ctx.fillText(this.detector ? "Царай хайж байна…" : "Царай танигч ачаалж байна…", cx, cy + r * 2.1 + 22);
+    font(ctx, compact ? 11 : 12, { weight: 700, mono: true, spacing: compact ? 2 : 4 }); ctx.fillStyle = rgba(ICE, 220);
+    ctx.fillText(this.detector ? "SCANNING FOR SUBJECT" : "LOADING TRACKER", cx, y);
+    font(ctx, compact ? 13 : 14); ctx.fillStyle = C.text2;
+    ctx.fillText(this.detector ? "Царай хайж байна…" : "Царай танигч ачаалж байна…", cx, y + (compact ? 17 : 22));
   }
 
-  paintPlaceholder(ctx, W, H) {
-    const cx = W / 2, cy = H / 2 - 30, r = Math.min(W, H) * 0.12;
+  paintPlaceholder(ctx, W, H, compact) {
+    const cx = W / 2, cy = compact ? H * 0.36 : H / 2 - 30, r = Math.min(W, H) * (compact ? 0.09 : 0.12);
     this.paintReticle(ctx, cx, cy, r, this.t * 40);
-    ctx.textAlign = "center"; ctx.textBaseline = "top"; font(ctx, 14); ctx.fillStyle = C.text2;
-    const lines = this.status === "error"
+    ctx.textAlign = "center"; ctx.textBaseline = "top"; font(ctx, compact ? 12.5 : 14); ctx.fillStyle = C.text2;
+    const where = "Хөтчийн хаягийн мөрөн дэх камерын тэмдэг дээр дарж зөвшөөрөөд,";   // desktop browsers only
+    let lines = this.status === "error"
       ? (this.error === "denied"
-        ? ["Камерын зөвшөөрөл олгогдоогүй байна.", "Хөтчийн хаягийн мөрөн дэх камерын тэмдэг дээр дарж зөвшөөрөөд,", "энд дарж дахин оролдоно уу.  ·  Allow camera access, then click to retry."]
+        ? ["Камерын зөвшөөрөл олгогдоогүй байна.", ...(compact ? [] : [where]), `${compact ? "Энд" : "энд"} дарж дахин оролдоно уу.  ·  Allow camera access, then ${TAP} to retry.`]
         : ["Камер олдсонгүй.  ·  No camera found.", "Энд дарж дахин оролдоно уу."])
       : ["Камер асааж байна…  ·  Starting camera…"];
-    lines.forEach((l, i) => ctx.fillText(l, cx, cy + r * 2.2 + i * 22));
+    lines = lines.flatMap(l => wrap(ctx, l, W * 0.8));
+    const lh = compact ? 17 : 22;
+    lines.forEach((l, i) => ctx.fillText(l, cx, cy + r * 2.2 + i * lh));
   }
 
-  paintFace(ctx, f, s, ox, oy, H) {
+  paintFace(ctx, f, s, ox, oy, stateY) {
     const P = ([x, y]) => [ox + x * s, oy + y * s];
     const [bx, by, bw, bh] = f.box;
     const x0 = ox + bx * s, y0 = oy + by * s, w = bw * s, h = bh * s;
@@ -327,7 +344,7 @@ export class Vision {
     font(ctx, 10.5, { weight: 700, mono: true, spacing: 2 }); ctx.textBaseline = "bottom"; ctx.fillStyle = ICE;
     ctx.textAlign = "left"; ctx.fillText("SUBJECT LOCKED", L, T - 6);
     ctx.textAlign = "right"; ctx.fillText(`CONF ${Math.round(m.conf * 100)}%`, R, T - 6);
-    if (B + 24 < H * 0.885 - 46) {
+    if (B + 24 < stateY - 6) {
       ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillStyle = C.text2;
       ctx.fillText(`DIST ≈ ${m.dist.toFixed(0)} CM   ·   ROLL ${sign(m.roll, 0)}°`, (L + R) / 2, B + 6);
     }
@@ -362,11 +379,12 @@ export class Vision {
     ctx.beginPath(); ctx.arc(re[0], re[1], er * 0.55, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(re[0] - er * 0.8, re[1]); ctx.lineTo(re[0] - er * 0.6, re[1]);
     ctx.moveTo(re[0] + er * 0.6, re[1]); ctx.lineTo(re[0] + er * 0.8, re[1]); ctx.stroke();
-    const k1 = [le[0] - er * 1.5, le[1] - er * 1.5], k2 = [k1[0] - er * 0.5, k1[1] - er * 0.5], k3 = [k2[0] - 70, k2[1]];
+    const k1 = [le[0] - er * 1.5, le[1] - er * 1.5], k2 = [k1[0] - er * 0.5, k1[1] - er * 0.5], k3 = [Math.max(8, k2[0] - 70), k2[1]];
     ctx.strokeStyle = rgba(ICE, 200);
     ctx.beginPath(); ctx.moveTo(...k1); ctx.lineTo(...k2); ctx.lineTo(...k3); ctx.stroke();
     font(ctx, 10.5, { weight: 700, mono: true, spacing: 1.5 }); ctx.textAlign = "right"; ctx.textBaseline = "bottom";
-    ctx.fillStyle = ICE; ctx.fillText("OCULAR LOCK · L", k2[0], k3[1] - 20);
-    ctx.fillStyle = C.text2; ctx.fillText(`PUPIL 4.${this.pupil} MM`, k2[0], k3[1] - 4);
+    const tx = Math.max(k2[0], 8 + ctx.measureText("OCULAR LOCK · L").width);   // a face close to a phone camera fills the frame
+    ctx.fillStyle = ICE; ctx.fillText("OCULAR LOCK · L", tx, k3[1] - 20);
+    ctx.fillStyle = C.text2; ctx.fillText(`PUPIL 4.${this.pupil} MM`, tx, k3[1] - 4);
   }
 }

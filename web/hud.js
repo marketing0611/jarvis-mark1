@@ -36,31 +36,36 @@ export function fitCanvas(canvas, ctx) {
   return [W, H];
 }
 
-/** Two label/value pairs in each corner, with an L-shaped bracket. */
-export function paintReadouts(ctx, W, H, readouts, mx = 26, my = 26) {
-  for (const [corner, items] of Object.entries(readouts)) {
-    const right = corner[1] === "r", top = corner[0] === "t";
-    const y0 = top ? my : H - my - 2 * 42 + 6;
+/** Label/value pairs in each corner, with an L-shaped bracket. Small screens show fewer `rows`, at `scale`. */
+export function paintReadouts(ctx, W, H, readouts, mx = 26, my = 26, { rows = 2, scale = 1 } = {}) {
+  const step = 42 * scale, arm = 16 * scale;
+  for (const [corner, all] of Object.entries(readouts)) {
+    const items = all.slice(0, rows), right = corner[1] === "r", top = corner[0] === "t";
+    const y0 = top ? my : H - my - items.length * step + 6 * scale;
     const x = right ? W - mx : mx;
-    const bx = right ? W - mx + 10 : mx - 10;
-    const by = top ? y0 - 8 : y0 + 2 * 42 - 4;
+    const bx = right ? W - mx + 10 * scale : mx - 10 * scale;
+    const by = top ? y0 - 8 * scale : y0 + items.length * step - 4 * scale;
     const sx = right ? -1 : 1, sy = top ? 1 : -1;
     ctx.strokeStyle = rgba(C.pri, 120); ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(bx + sx * 16, by); ctx.lineTo(bx, by); ctx.lineTo(bx, by + sy * 16); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bx + sx * arm, by); ctx.lineTo(bx, by); ctx.lineTo(bx, by + sy * arm); ctx.stroke();
     ctx.textAlign = right ? "right" : "left"; ctx.textBaseline = "top";
     items.forEach(([label, value], i) => {
-      const y = y0 + i * 42;
-      font(ctx, 9.5, { weight: 700, mono: true, spacing: 2 }); ctx.fillStyle = C.text3; ctx.fillText(label, x, y);
-      font(ctx, 15, { weight: 600, mono: true, spacing: 1 }); ctx.fillStyle = C.text; ctx.fillText(value, x, y + 14);
+      const y = y0 + i * step;
+      font(ctx, 9.5 * scale, { weight: 700, mono: true, spacing: 2 * scale }); ctx.fillStyle = C.text3; ctx.fillText(label, x, y);
+      font(ctx, 15 * scale, { weight: 600, mono: true, spacing: scale }); ctx.fillStyle = C.text; ctx.fillText(value, x, y + 14 * scale);
     });
   }
 }
 
-export function paintState(ctx, W, y, label, color) {
+export function paintState(ctx, W, y, label, color, compact = false) {
+  const [big, gap, small, below] = compact ? [16, 5, 13, 22] : [22, 8, 15, 32];
   ctx.textAlign = "center"; ctx.textBaseline = "top";
-  font(ctx, 22, { weight: 700, mono: true, spacing: 8 }); ctx.fillStyle = color; ctx.fillText(label, W / 2, y);
-  font(ctx, 15); ctx.fillStyle = C.text2; ctx.fillText(STATE_MN[label] || "", W / 2, y + 32);
+  font(ctx, big, { weight: 700, mono: true, spacing: gap }); ctx.fillStyle = color; ctx.fillText(label, W / 2, y);
+  font(ctx, small); ctx.fillStyle = C.text2; ctx.fillText(STATE_MN[label] || "", W / 2, y + below);
 }
+
+/** Phones and other small stages get a tighter HUD. */
+export const isCompact = (W, H) => W < 560 || H < 380;
 
 export class Reactor {
   constructor(canvas) {
@@ -77,9 +82,20 @@ export class Reactor {
     this.static = null; this.staticKey = "";
   }
 
-  geometry(W, H) {
-    const R = Math.max(110, Math.min((H - 130) / 2, (W - 80) / 2));
-    return [W / 2, (H - 110) / 2 + 12, R];
+  // Where the ring sits. A compact stage keeps one readout per corner and puts the state label in a strip
+  // under the ring; either way the ring shrinks rather than run into the corner readouts.
+  layout(W, H) {
+    const compact = isCompact(W, H), rows = compact ? 1 : 2, scale = compact ? 0.82 : 1, m = compact ? 14 : 26;
+    const band = 48, cx = W / 2;
+    let cy, R;
+    if (compact) { cy = 8 + (H - band - 8) / 2; R = Math.min((H - band - 8) / 2, (W - 24) / 2); }
+    else { cy = (H - 110) / 2 + 12; R = Math.min((H - 130) / 2, (W - 80) / 2); }
+    const rw = 90 * scale, rh = ((rows - 1) * 42 + 30) * scale;     // one readout block, about nine characters wide
+    R = Math.min(R, Math.hypot(cx - m - rw, cy - m - rh) - 10);
+    if (!compact) R = Math.min(R, Math.hypot(cx - m - rw, H - m - rh - cy) - 10);
+    R = Math.max(40, R);
+    const stateY = compact ? Math.min(cy + R + 8, H - band + 6) : cy + R + 18;
+    return { cx, cy, R, compact, rows, scale, m, stateY };
   }
 
   step(dt) {
@@ -100,7 +116,7 @@ export class Reactor {
         : 0.05 + 0.03 * Math.sin(this.t * 2 + i * 0.25);
       this.bars[i] += (target - this.bars[i]) * 0.35;
     }
-    const [, , R] = this.geometry(this.canvas.clientWidth, this.canvas.clientHeight);
+    const { R } = this.layout(this.canvas.clientWidth, this.canvas.clientHeight);
     const grow = R * (this.speaking ? 0.014 : 0.007) * f;
     this.pulses = this.pulses.map(r => r + grow).filter(r => r < R * 0.95);
     if ((this.speaking || (this.listening && this.level > 0.35)) && Math.random() < 0.1) this.pulses.push(R * 0.32);
@@ -114,18 +130,19 @@ export class Reactor {
     off.width = W * dpr; off.height = H * dpr;
     const ctx = off.getContext("2d");
     ctx.scale(dpr, dpr);
-    const [cx, cy, R] = this.geometry(W, H);
+    const { cx, cy, R, compact } = this.layout(W, H);
     ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = rgba(C.pri, 26);
     for (let x = cx % 28; x < W; x += 28) for (let y = cy % 28; y < H; y += 28) ctx.fillRect(x - 0.8, y - 0.8, 1.6, 1.6);
     ctx.strokeStyle = rgba(C.pri, 40); ctx.lineWidth = 1;
     for (const s of [-1, 1]) {
       ctx.beginPath(); ctx.moveTo(cx + s * R * 1.06, cy); ctx.lineTo(cx + s * (W / 2 - 16), cy); ctx.stroke();
+      if (compact) continue;               // no room above and below the ring
       ctx.beginPath(); ctx.moveTo(cx, cy + s * R * 1.06); ctx.lineTo(cx, cy + s * (cy - 8)); ctx.stroke();
     }
     ctx.strokeStyle = rgba(C.pri, 130); ctx.lineWidth = 1.5;
     const b = R * 1.1;
-    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    for (const [sx, sy] of compact ? [] : [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
       const x = cx + sx * b, y = cy + sy * b;
       ctx.beginPath(); ctx.moveTo(x - sx * 22, y); ctx.lineTo(x, y); ctx.lineTo(x, y - sy * 22); ctx.stroke();
     }
@@ -139,7 +156,7 @@ export class Reactor {
     }
     font(ctx, 9, { weight: 700, mono: true }); ctx.fillStyle = rgba(C.pri, 120);
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    for (let deg = 0; deg < 360; deg += 30) {
+    for (let deg = 0; deg < (R >= 150 ? 360 : 0); deg += 30) {   // degree labels crowd a small ring
       const rad = deg * Math.PI / 180;
       ctx.fillText(String(deg).padStart(3, "0"), cx + (R - 26) * Math.sin(rad), cy - (R - 26) * Math.cos(rad));
     }
@@ -152,7 +169,7 @@ export class Reactor {
     const [W, H] = fitCanvas(this.canvas, ctx);
     if (!W || !H) return;
     ctx.drawImage(this.staticLayer(W, H), 0, 0, W, H);
-    const [cx, cy, R] = this.geometry(W, H);
+    const L = this.layout(W, H), { cx, cy, R } = L;
     const col = this.color, g = this.glow, TAU = Math.PI * 2, rad = d => d * Math.PI / 180;
 
     let grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.1);
@@ -194,9 +211,11 @@ export class Reactor {
       ctx.strokeStyle = rgba(col, i ? 165 : 235);
       ctx.beginPath(); ctx.arc(cx, cy, r, rad(135), rad(135 + 270 * Math.min(value, 100) / 100)); ctx.stroke();
     });
-    font(ctx, 10.5, { weight: 700, mono: true, spacing: 1.5 }); ctx.fillStyle = C.text2; ctx.textBaseline = "top";
-    ctx.textAlign = "right"; ctx.fillText(this.gauges[0][1], cx - R * 0.08, cy + R * 0.6);
-    ctx.textAlign = "left"; ctx.fillText(this.gauges[1][1], cx + R * 0.08, cy + R * 0.6);
+    if (R >= 160) {                        // on a small ring the labels would sit on the rings around them
+      font(ctx, 10.5, { weight: 700, mono: true, spacing: 1.5 }); ctx.fillStyle = C.text2; ctx.textBaseline = "top";
+      ctx.textAlign = "right"; ctx.fillText(this.gauges[0][1], cx - R * 0.08, cy + R * 0.6);
+      ctx.textAlign = "left"; ctx.fillText(this.gauges[1][1], cx + R * 0.08, cy + R * 0.6);
+    }
 
     // circular audio visualiser
     const n = 96, r0 = R * 0.405;
@@ -209,8 +228,8 @@ export class Reactor {
     }
 
     this.paintCore(ctx, cx, cy, R * 0.3, col, g, this.rings[2] * 0.25);
-    paintState(ctx, W, cy + R + 18, this.label, col);
-    paintReadouts(ctx, W, H, this.readouts);
+    paintState(ctx, W, L.stateY, this.label, col, L.compact);
+    paintReadouts(ctx, W, H, this.readouts, L.m, L.m, { rows: L.rows, scale: L.scale });
   }
 
   paintCore(ctx, cx, cy, r, col, g, spin) {

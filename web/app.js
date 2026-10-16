@@ -149,6 +149,7 @@ async function submit(text, lang = null) {
 // ── speaking ──
 const audio = new Audio();
 let audioCtx = null, voiceAnalyser = null, speechGen = 0, speechQueue = Promise.resolve(), pending = 0;
+const SILENCE = "data:audio/wav;base64,UklGRnQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==";
 
 function speakable(text) {
   const mn = /[а-яөү]/i.test(text);
@@ -166,6 +167,14 @@ function ensureAudioGraph() {
     audioCtx.createMediaElementSource(audio).connect(voiceAnalyser);
     voiceAnalyser.connect(audioCtx.destination);
   } catch { audioCtx = null; voiceAnalyser = null; }
+}
+
+// Phone browsers only play sound that a tap started, so the first tap anywhere unlocks the one audio
+// element and the audio graph; replies that arrive later can then play on their own.
+function unlockAudio() {
+  ensureAudioGraph();
+  audioCtx?.resume().catch(() => {});
+  if (!app.speaking) { audio.src = SILENCE; audio.play().catch(() => {}); }
 }
 
 function setSpeaking(on) {
@@ -216,7 +225,9 @@ function speakWithBrowser(text, lang) {
       : voices.find(v => /en-GB/.test(v.lang)) || voices.find(v => v.lang.startsWith("en"));
     if (!voice) return resolve();                   // no Mongolian voice here: stay quiet
     const u = new SpeechSynthesisUtterance(text);
-    u.voice = voice; u.lang = voice.lang; u.onend = u.onerror = resolve;
+    const done = () => { clearTimeout(timer); resolve(); };
+    const timer = setTimeout(done, 4000 + text.length * 120);   // iOS can drop an utterance without an end event
+    u.voice = voice; u.lang = voice.lang; u.onend = u.onerror = done;
     synth.speak(u);
   });
 }
@@ -316,6 +327,23 @@ function setMode(mode) {
   if (mode === "vision") vision.start(); else vision.stop();
 }
 
+// ── on-screen keyboard: it covers half a phone screen, so the chat takes the whole screen while it is up ──
+const touchOnly = matchMedia("(hover: none) and (pointer: coarse)");
+let fullH = 0, fullW = 0;
+
+function fitKeyboard() {
+  const vv = window.visualViewport;
+  const h = vv ? vv.height * vv.scale : window.innerHeight;   // × scale: a pinch-zoom is not a keyboard
+  if (window.innerWidth !== fullW) { fullW = window.innerWidth; fullH = 0; }   // rotated
+  fullH = Math.max(fullH, h);
+  const up = touchOnly.matches && document.activeElement === input && fullH - h > 120;
+  const root = document.documentElement, was = root.classList.contains("typing");
+  root.classList.toggle("typing", up);
+  root.style.setProperty("--app-h", up && vv ? `${vv.height}px` : "");   // iOS keeps 100dvh under the keyboard
+  if (up) window.scrollTo(0, 0);
+  if (up !== was) messages.scrollTop = messages.scrollHeight;
+}
+
 function platformName() {
   const p = (navigator.userAgentData?.platform || navigator.platform || "").toLowerCase();
   const ua = navigator.userAgent.toLowerCase();
@@ -375,6 +403,7 @@ for (const text of QUICK) {
   $("#chips").append(b);
 }
 $("#bar").addEventListener("submit", e => { e.preventDefault(); const t = input.value; input.value = ""; submit(t); });
+$("#bar").addEventListener("mousedown", e => { if (e.target.closest("button")) e.preventDefault(); });   // keep the keyboard up
 $("#mic").onclick = toggleMic;
 $("#voice").onclick = () => { app.voiceOn = !app.voiceOn; store.set("jarvis.voice", app.voiceOn); if (!app.voiceOn) stopSpeaking(); refreshState(); };
 $("#lang").onclick = () => {
@@ -392,6 +421,11 @@ document.addEventListener("keydown", e => {
   const act = { KeyM: toggleMic, KeyV: () => $("#voice").click(), KeyC: () => setMode(app.mode === "reactor" ? "vision" : "reactor") }[e.code];
   if (act) { e.preventDefault(); act(); }
 });
+for (const type of ["pointerdown", "keydown"]) document.addEventListener(type, unlockAudio, { once: true, capture: true });
+input.addEventListener("focus", fitKeyboard);
+input.addEventListener("blur", fitKeyboard);
+window.visualViewport?.addEventListener("resize", fitKeyboard);
+window.addEventListener("resize", fitKeyboard);
 if (!SR) { $("#mic").disabled = true; $("#mic").title = "Яриа таних: Chrome эсвэл Edge хэрэгтэй"; $("#lang").hidden = true; }
 navigator.getBattery?.().then(b => {
   const update = () => { app.battery = { level: b.level, charging: b.charging }; };
@@ -400,6 +434,7 @@ navigator.getBattery?.().then(b => {
 window.speechSynthesis?.getVoices();
 
 refreshState();
+fitKeyboard();
 everySecond();
 setInterval(everySecond, 1000);
 requestAnimationFrame(frame);
