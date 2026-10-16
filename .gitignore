@@ -1,0 +1,12 @@
+# Secrets and personal data
+config/api_keys.json
+memory/long_term.json
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
